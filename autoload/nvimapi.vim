@@ -1,15 +1,25 @@
 let s:deprecated = 0
 
+function! s:version() abort
+  if !exists('*execute')
+    return ''
+  endif
+
+  return matchstr(execute('silent version'), 'NVIM v\zs[0-9.]\+')
+endfunction
+
 function! s:show_buffer() abort
   let new = 0
   let win = bufwinnr('nvim://api')
   if win == -1
-    silent split nvim://api
+    silent split | enew
+    setlocal noswapfile
+    silent file nvim://api
     let new = 1
   else
     execute win 'wincmd w'
   endif
-  silent setlocal bufhidden buftype=nofile filetype=help
+  silent setlocal bufhidden buftype=nofile filetype=help noswapfile
   return new
 endfunction
 
@@ -66,6 +76,13 @@ function! s:syntax() abort
 endfunction
 
 function! nvimapi#display(bang) abort
+  let ver = s:version()
+  if empty(ver) || !exists('*api_info')
+    echohl ErrorMsg
+    echo 'api_info() is not available.'
+    return
+  endif
+
   if !s:show_buffer() && a:bang == s:deprecated
     call s:syntax()
     return
@@ -82,6 +99,11 @@ function! nvimapi#display(bang) abort
     let functions[item.name] = item
   endfor
 
+  if ver == '0.1.5'
+    $put =['Note: Functions for Window, Buffer, and Tabpage are deprecated and have',
+          \ '      been prefixed with `nvim_` starting from `0.1.6`.', '']
+  endif
+
   for [type_name, type_info] in items(api.types)
     $put =[type_name.'~', '']
     let funcs = []
@@ -89,6 +111,11 @@ function! nvimapi#display(bang) abort
       if has_key(func_info, 'deprecated_since') && !s:deprecated
         continue
       endif
+
+      if !has_key(type_info, 'prefix')
+        let type_info.prefix = tolower(type_name).'_'
+      endif
+
       if func_name =~# '^'.type_info.prefix
         call s:uadd(s:seen, func_name)
         call s:uadd(funcs, func_name)
